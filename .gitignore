@@ -1,0 +1,37 @@
+# Ignore Terraform plugin binaries and caches
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+*.log
+
+# Ignore Terraform crash logs
+crash.log
+
+# Ignore AWS credentials or sensitive files (if accidentally placed)
+*.pem
+*.key
+*.env
+
+# Ignore Python cache files (for chatbot or scripts)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore IDE/editor settings
+.vscode/
+.idea/
+
+# Ignore reports and generated artifacts (optional)
+reports/
+*.zip
+*.tar.gz
+
+# Ignore Chatbot training artifacts (if applicable)
+*.jsonl
+*.sqlite3
