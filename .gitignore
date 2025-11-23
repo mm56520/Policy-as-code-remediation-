@@ -36,3 +36,4 @@ reports/
 *.jsonl
 *.sqlite3
 Policy-as-code-backup/
+.terraform/
