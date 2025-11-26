@@ -22,28 +22,35 @@ jobs:
       - name: Install Checkov and jq
         run: pip install checkov jq
 
+      
       - name: Run Checkov scan
         run: |
           checkov -d ./iac -o json > checkov_report.json || true
 
+      
       - name: Parse Checkov results
-        id: checkov
         run: |
-          FAILED=$(jq '.results.failed_checks | length' checkov_report.json)
-          echo "Failed checks: $FAILED"
-          echo "failed_count=$FAILED" >> "$GITHUB_OUTPUT"
+          echo "Checkov scan completed. Violations found:"
+          jq '.results.failed_checks[] | {check_id, resource, file_path}' checkov_report.json
 
+      
+      - name: Upload Checkov Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: checkov-report
+          path: checkov_report.json
+
+      
       - name: Set up Terraform
-        if: steps.checkov.outputs.failed_count == '0'
         uses: hashicorp/setup-terraform@v2
 
-      - name: Terraform Init
-        if: steps.checkov.outputs.failed_count == '0'
+      
+      - name: Terraform Init (Remediation)
         run: terraform init
         working-directory: ./remediation
 
-      - name: Terraform Apply
-        if: steps.checkov.outputs.failed_count == '0'
+      
+      - name: Terraform Apply (Remediation)
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
