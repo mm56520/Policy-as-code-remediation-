@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'iac/**'
+  workflow_dispatch:	
 
 jobs:
   scan_and_fix:
