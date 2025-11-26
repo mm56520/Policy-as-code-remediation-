@@ -24,4 +24,3 @@ jobs:
 
       - name: Run Checkov on iac directory
         run: checkov -d iac
-EOF
