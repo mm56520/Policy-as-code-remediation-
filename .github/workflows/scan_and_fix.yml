@@ -22,37 +22,46 @@ jobs:
       - name: Install Checkov and jq
         run: pip install checkov jq
 
-      
-      - name: Run Checkov scan
+      # 1) Make a copy of iac/ into remediation/
+      - name: Prepare remediation directory
         run: |
-          checkov -d ./iac -o json > checkov_report.json || true
+          rm -rf remediation
+          cp -r iac remediation
 
-      
+      # 2) Run Checkov with auto-fix against the remediation copy
+      - name: Run Checkov scan with auto-fix
+        run: |
+          checkov -d ./remediation --auto-fix -o json > checkov_report.json || true
+
+      # 3) Parse how many failed checks remain after auto-fix
       - name: Parse Checkov results
+        id: checkov
         run: |
-          echo "Checkov scan completed. Violations found:"
-          jq '.results.failed_checks[] | {check_id, resource, file_path}' checkov_report.json
+          FAILED=$(jq '.results.failed_checks | length' checkov_report.json)
+          echo "Failed checks after auto-fix: $FAILED"
+          echo "failed_count=$FAILED" >> "$GITHUB_OUTPUT"
 
-      
+      # 4) (Optional) Upload the report so you can download it from GitHub
       - name: Upload Checkov Report
         uses: actions/upload-artifact@v3
         with:
           name: checkov-report
           path: checkov_report.json
 
-      
+      # 5) Set up Terraform (for remediation)
       - name: Set up Terraform
+        if: steps.checkov.outputs.failed_count == '0'
         uses: hashicorp/setup-terraform@v2
 
-      
       - name: Terraform Init (Remediation)
-        run: terraform init
+        if: steps.checkov.outputs.failed_count == '0'
         working-directory: ./remediation
+        run: terraform init
 
-      
       - name: Terraform Apply (Remediation)
+        if: steps.checkov.outputs.failed_count == '0'
+        working-directory: ./remediation
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: terraform apply -auto-approve
-        working-directory: ./remediation
