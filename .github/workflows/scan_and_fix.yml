@@ -22,18 +22,15 @@ jobs:
       - name: Install Checkov and jq
         run: pip install checkov jq
 
-      # 1) Make a copy of iac/ into remediation/
       - name: Prepare remediation directory
         run: |
           rm -rf remediation
           cp -r iac remediation
 
-      # 2) Run Checkov with auto-fix against the remediation copy
       - name: Run Checkov scan with auto-fix
         run: |
           checkov -d ./remediation --auto-fix -o json > checkov_report.json || true
 
-      # 3) Parse how many failed checks remain after auto-fix
       - name: Parse Checkov results
         id: checkov
         run: |
@@ -41,11 +38,11 @@ jobs:
           echo "Failed checks after auto-fix: $FAILED"
           echo "failed_count=$FAILED" >> "$GITHUB_OUTPUT"
 
-      # 3.5) Debug: print parsed failed_count and show diff
-      - name: Debug: print parsed failed_count and show diff
+      - name: Debug: print parsed failed_count
+        run: echo "steps.checkov.outputs.failed_count=${{ steps.checkov.outputs.failed_count }}"
+
+      - name: Debug: show remediation tree and diff
         run: |
-          echo "steps.checkov.outputs.failed_count=${{ steps.checkov.outputs.failed_count }}"
-          echo "As a number via fromJSON(): ${{ fromJSON(steps.checkov.outputs.failed_count) }}"
           echo "--- remediation tree ---"
           ls -laR remediation || true
           echo "--- diff between iac and remediation (if any) ---"
@@ -53,15 +50,12 @@ jobs:
           echo "--- head of checkov_report.json results ---"
           jq '.results' checkov_report.json || true
 
-      # 4) Upload the report so you can download it from GitHub
       - name: Upload Checkov Report
         uses: actions/upload-artifact@v4
         with:
           name: checkov-report
           path: checkov_report.json
 
-      # 5) Set up Terraform (for remediation)
-      # Terraform will run ONLY if failed_count == 0
       - name: Set up Terraform
         if: ${{ fromJSON(steps.checkov.outputs.failed_count) == 0 }}
         uses: hashicorp/setup-terraform@v2
