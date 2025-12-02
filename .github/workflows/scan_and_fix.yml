@@ -41,7 +41,7 @@ jobs:
           echo "Failed checks after auto-fix: $FAILED"
           echo "failed_count=$FAILED" >> "$GITHUB_OUTPUT"
 
-      # 3.5) Debug: show the parsed value and what changed between iac and remediation
+      # 3.5) Debug: print parsed failed_count and show diff
       - name: Debug: print parsed failed_count and show diff
         run: |
           echo "steps.checkov.outputs.failed_count=${{ steps.checkov.outputs.failed_count }}"
@@ -50,7 +50,7 @@ jobs:
           ls -laR remediation || true
           echo "--- diff between iac and remediation (if any) ---"
           diff -ru iac remediation || true
-          echo "--- head of checkov_report.json ---"
+          echo "--- head of checkov_report.json results ---"
           jq '.results' checkov_report.json || true
 
       # 4) (Optional) Upload the report so you can download it from GitHub
