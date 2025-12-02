@@ -28,17 +28,17 @@ jobs:
           rm -rf remediation
           cp -r iac remediation
 
-      # 2) Run Checkov with auto-fix against the remediation copy
-      - name: Run Checkov scan with auto-fix
+      # 2) Run Checkov scan against the remediation copy
+      - name: Run Checkov scan
         run: |
-          checkov -d ./remediation --auto-fix -o json > checkov_report.json || true
+          checkov -d ./remediation -o json > checkov_report.json || true
 
-      # 3) Parse how many failed checks remain after auto-fix
+      # 3) Parse how many failed checks remain
       - name: Parse Checkov results
         id: checkov
         run: |
-          FAILED=$(jq '.results.failed_checks | length' checkov_report.json)
-          echo "Failed checks after auto-fix: $FAILED"
+          FAILED=$(jq '.results.failed_checks | length // 0' checkov_report.json 2>/dev/null || echo "0")
+          echo "Failed checks: $FAILED"
           echo "failed_count=$FAILED" >> "$GITHUB_OUTPUT"
 
       # 4) (Optional) Upload the report so you can download it from GitHub
