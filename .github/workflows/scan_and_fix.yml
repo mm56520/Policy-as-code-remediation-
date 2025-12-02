@@ -42,10 +42,18 @@ jobs:
           echo "failed_count=$FAILED" >> "$GITHUB_OUTPUT"
 
       # 3.5) Debug: print parsed failed_count and show diff
+      # Move the expression into env so YAML/Actions expand it cleanly.
       - name: Debug: print parsed failed_count and show diff
+        env:
+          CHECKOV_FAILED: ${{ steps.checkov.outputs.failed_count }}
         run: |
-          echo "steps.checkov.outputs.failed_count=${{ steps.checkov.outputs.failed_count }}"
-          echo "As a number via fromJSON(): ${{ fromJSON(steps.checkov.outputs.failed_count) }}"
+          echo "steps.checkov.outputs.failed_count=$CHECKOV_FAILED"
+          # Show numeric conversion using bash (will print NaN replacement if not a number)
+          if printf '%d' "$CHECKOV_FAILED" >/dev/null 2>&1; then
+            echo "As a number via bash: $(printf '%d' "$CHECKOV_FAILED")"
+          else
+            echo "As a number via bash: NaN"
+          fi
           echo "--- remediation tree ---"
           ls -laR remediation || true
           echo "--- diff between iac and remediation (if any) ---"
