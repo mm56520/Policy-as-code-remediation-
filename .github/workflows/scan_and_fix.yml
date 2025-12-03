@@ -1,4 +1,4 @@
-name: Scan and Remediate
+name: Scan and Remediate IaC
 
 on:
   push:
@@ -7,62 +7,131 @@ on:
   workflow_dispatch:
 
 jobs:
-  scan_and_fix:
+  scan_and_remediate:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      ############################################################
+      # 1. Checkout
+      ############################################################
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+      ############################################################
+      # 2. Install Python + Checkov
+      ############################################################
+      - name: Install Checkov + jq
+        run: |
+          pip install checkov jq
 
-      - name: Install Checkov and jq
-        run: pip install checkov jq
-
-      # 1) Make a copy of iac/ into remediation/
+      ############################################################
+      # 3. Prepare a remediation copy of the IaC directory
+      ############################################################
       - name: Prepare remediation directory
         run: |
           rm -rf remediation
           cp -r iac remediation
 
-      # 2) Run Checkov with auto-fix against the remediation copy
-      - name: Run Checkov scan with auto-fix
+      ############################################################
+      # 4. Run Checkov STANDARD (no autofix) on original IaC
+      ############################################################
+      - name: Run Checkov on original IaC
         run: |
-          checkov -d ./remediation --auto-fix -o json > checkov_report.json || true
+          checkov -d ./iac -o json > original_report.json || true
 
-      # 3) Parse how many failed checks remain after auto-fix
-      - name: Parse Checkov results
-        id: checkov
+      - name: Count original failures
+        id: original
         run: |
-          FAILED=$(jq '.results.failed_checks | length' checkov_report.json)
-          echo "Failed checks after auto-fix: $FAILED"
-          echo "failed_count=$FAILED" >> "$GITHUB_OUTPUT"
+          FAILED=$(jq '.results.failed_checks | length' original_report.json)
+          echo "original_failed=$FAILED" >> "$GITHUB_OUTPUT"
 
-      # 4) (Optional) Upload the report so you can download it from GitHub
-      - name: Upload Checkov Report
+      - name: Upload original report
         uses: actions/upload-artifact@v4
-
         with:
-          name: checkov-report
-          path: checkov_report.json
+          name: original-checkov-report
+          path: original_report.json
 
-      # 5) Set up Terraform (for remediation)
+      ############################################################
+      # 5. Run Checkov AUTO-FIX on remediation directory
+      ############################################################
+      - name: Run Checkov auto-fix on remediation copy
+        run: |
+          checkov -d ./remediation --auto-fix -o json > fixed_report.json || true
+
+      - name: Count failures after auto-fix
+        id: fixed
+        run: |
+          FAILED=$(jq '.results.failed_checks | length' fixed_report.json)
+          echo "fixed_failed=$FAILED" >> "$GITHUB_OUTPUT"
+
+      - name: Upload fixed report
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixed-checkov-report
+          path: fixed_report.json
+
+      ############################################################
+      # 6. If failures still exist → run Terraform remediation
+      ############################################################
       - name: Set up Terraform
-        if: steps.checkov.outputs.failed_count == '0'
+        if: steps.fixed.outputs.fixed_failed != '0'
         uses: hashicorp/setup-terraform@v2
 
       - name: Terraform Init (Remediation)
-        if: steps.checkov.outputs.failed_count == '0'
+        if: steps.fixed.outputs.fixed_failed != '0'
         working-directory: ./remediation
         run: terraform init
 
       - name: Terraform Apply (Remediation)
-        if: steps.checkov.outputs.failed_count == '0'
+        if: steps.fixed.outputs.fixed_failed != '0'
         working-directory: ./remediation
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: terraform apply -auto-approve
+
+      ############################################################
+      # 7. Re-run Checkov after Terraform to confirm final state
+      ############################################################
+      - name: Re-run Checkov after remediation
+        if: steps.fixed.outputs.fixed_failed != '0'
+        run: |
+          checkov -d ./remediation -o json > post_remediation_report.json || true
+
+      - name: Count failures after Terraform remediation
+        if: steps.fixed.outputs.fixed_failed != '0'
+        id: final
+        run: |
+          FAILED=$(jq '.results.failed_checks | length' post_remediation_report.json)
+          echo "final_failed=$FAILED" >> "$GITHUB_OUTPUT"
+
+      - name: Upload final Checkov report
+        if: steps.fixed.outputs.fixed_failed != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-checkov-report
+          path: post_remediation_report.json
+
+      ############################################################
+      # 8. Fail pipeline if issues still exist after remediation
+      ############################################################
+      - name: Fail workflow if misconfigs remain
+        if: steps.fixed.outputs.fixed_failed != '0'
+        run: |
+          if [ "${{ steps.final.outputs.final_failed }}" -ne 0 ]; then
+            echo "Terraform remediation did NOT fix all issues."
+            exit 1
+          fi
+
+      ############################################################
+      # 9. Final output message
+      ############################################################
+      - name: Print summary
+        run: |
+          echo "Original failures: ${{ steps.original.outputs.original_failed }}"
+          echo "After auto-fix:    ${{ steps.fixed.outputs.fixed_failed }}"
+          if [[ "${{ steps.fixed.outputs.fixed_failed }}" == "0" ]]; then
+            echo "No remediation required."
+          else
+            echo "Post-remediation check complete."
+          fi
