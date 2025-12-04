@@ -2,6 +2,10 @@ name: Checkov Scan and Auto-Remediate
 
 on:
   push:
+name: Checkov Scan and Auto-Remediate
+
+on:
+  push:
     branches: [ "main" ]
   pull_request:
 
@@ -10,64 +14,71 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Install Checkov and jq
+        run: |
+          pip install checkov
+          sudo apt-get update && sudo apt-get install -y jq
 
-    - name: Install Checkov
-      run: pip install checkov
+      # Step 1: Run Checkov on insecure IaC
+      - name: Scan Insecure Terraform
+        id: checkov-scan
+        run: |
+          if [ ! -d "./iac/insecure" ]; then
+            echo "Directory ./iac/insecure does not exist. Failing early."
+            exit 1
+          fi
 
-    # Step 1: Run Checkov on insecure IaC
-    - name: Scan Insecure Terraform
-      id: checkov-scan
-      run: |
-        if [ ! -d "./iac/insecure" ]; then
-          echo "Directory ./iac/insecure does not exist. Failing early."
-          exit 1
-        fi
+          checkov -d ./iac/insecure -o json > checkov_report.json || true
+          FAIL_COUNT=$(jq '.summary.failed // 0' checkov_report.json)
+          echo "Checkov failed count: $FAIL_COUNT"
+          echo "fail_count=$FAIL_COUNT" >> "$GITHUB_OUTPUT"
 
-        checkov -d ./iac/insecure -o json > checkov_report.json || true
-        FAIL_COUNT=$(jq '.summary.failed' checkov_report.json)
-        echo "fail_count=$FAIL_COUNT" >> $GITHUB_OUTPUT
+      # Step 2: Apply Secure Module (Auto-Remediation)
+      - name: Apply Secure Module (Auto-Remediation)
+        if: ${{ steps.checkov-scan.outputs.fail_count != '0' }}
+        run: |
+          echo "Misconfig detected. Applying secure module..."
+          rm -rf ./iac/current
+          cp -r ./iac/secure ./iac/current
 
-    # Step 2: Apply Secure Module (Auto-Remediation)
-    - name: Apply Secure Module (Auto-Remediation)
-    ...
+      # Step 2b: Use Insecure Module (No Misconfigs)
+      - name: Use Insecure Module (No Misconfigs)
+        if: ${{ steps.checkov-scan.outputs.fail_count == '0' }}
+        run: |
+          echo "No misconfigs detected. Using insecure module."
+          rm -rf ./iac/current
+          cp -r ./iac/insecure ./iac/current
 
-    # Step 2b: Use Insecure Module
-    - name: Use Insecure Module (No Misconfigs)
-    ...
+      # Provide AWS credentials to the runner
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-    # NEW REQUIRED FIX: Provide AWS credentials
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
+      # Step 3: Terraform steps on the selected module (iac/current)
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
-    # Step 3: Terraform steps
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      - name: Terraform Init
+        working-directory: ./iac/current
+        run: terraform init
 
-    - name: Terraform Init
-      run: |
-        cd ./iac/current
-        terraform init
+      - name: Terraform Plan
+        working-directory: ./iac/current
+        run: terraform plan -out=tfplan
 
-    - name: Terraform Plan
-      run: |
-        cd ./iac/current
-        terraform plan -out=tfplan
+      - name: Terraform Apply
+        working-directory: ./iac/current
+        run: terraform apply -auto-approve tfplan
 
-    - name: Terraform Apply
-      run: |
-        cd ./iac/current
-        terraform apply -auto-approve tfplan
-
-    # Step 4: Upload reports
-    - name: Upload Checkov Report
-      uses: actions/upload-artifact@v3
-      with:
-        name: checkov_report
-        path: checkov_report.json
+      # Step 4: Upload Checkov report
+      - name: Upload Checkov Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov_report
+          path: checkov_report.json
