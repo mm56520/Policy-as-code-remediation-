@@ -12,7 +12,7 @@ jobs:
     steps:
 
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Install Checkov
       run: pip install checkov
@@ -22,7 +22,6 @@ jobs:
       id: checkov-scan
       run: |
         checkov -d ./iac/insecure -o json > checkov_report.json || true
-        # Extract failed checks count for condition logic
         FAIL_COUNT=$(jq '.summary.failed' checkov_report.json)
         echo "fail_count=$FAIL_COUNT" >> $GITHUB_OUTPUT
 
@@ -44,7 +43,7 @@ jobs:
 
     # Step 3: Terraform steps on the selected module
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      uses: hashicorp/setup-terraform@v4
 
     - name: Terraform Init
       run: |
@@ -63,7 +62,7 @@ jobs:
 
     # Step 4: Upload reports
     - name: Upload Checkov Report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: checkov_report
         path: checkov_report.json
