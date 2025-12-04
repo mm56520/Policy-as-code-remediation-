@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Checkov
         run: pip install checkov
@@ -22,7 +22,7 @@ jobs:
           true
 
       - name: Upload fixed report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: fixed_report
           path: fixed_report.json
