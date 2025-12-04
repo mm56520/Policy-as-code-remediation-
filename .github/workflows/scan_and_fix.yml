@@ -2,10 +2,6 @@ name: Checkov Scan and Auto-Remediate
 
 on:
   push:
-name: Checkov Scan and Auto-Remediate
-
-on:
-  push:
     branches: [ "main" ]
   pull_request:
 
