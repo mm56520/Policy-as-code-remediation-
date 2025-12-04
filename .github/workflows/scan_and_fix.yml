@@ -43,7 +43,7 @@ jobs:
 
     # Step 3: Terraform steps on the selected module
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v4
+      uses: hashicorp/setup-terraform@v3
 
     - name: Terraform Init
       run: |
