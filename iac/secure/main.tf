@@ -1,3 +1,17 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+##### Secure S3 bucket
 resource "aws_s3_bucket" "public_bucket" {
   bucket = "capstone-insecure-bucket"
   acl    = "private"
@@ -19,6 +33,7 @@ resource "aws_s3_bucket_public_access_block" "public_block" {
 
 resource "aws_s3_bucket_versioning" "bucket_versioning" {
   bucket = aws_s3_bucket.public_bucket.id
+
   versioning_configuration {
     status = "Enabled"
   }
@@ -26,9 +41,10 @@ resource "aws_s3_bucket_versioning" "bucket_versioning" {
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "bucket_encryption" {
   bucket = aws_s3_bucket.public_bucket.id
+
   rule {
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
     }
   }
-}
+} 
